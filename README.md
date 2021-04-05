@@ -4,7 +4,7 @@ Driving into Nashville's complex healthcare referral system based of 2017 Medica
 ### Team
 Team lead: Courtney Everest (ce initials for notebooks) <br />
 Alexa Zylstra (az initials for notebooks) <br />
-Armelle Le Guelte (alg initials for notebooks)
+Armelle Le Guelte (alg initials for notebooks) <br />
 And the entire Data Science Bootcamp Cohort 4
 
 ### Duration
