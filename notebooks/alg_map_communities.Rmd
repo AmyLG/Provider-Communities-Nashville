@@ -1,0 +1,229 @@
+---
+title: "Community maps"
+output: html_document
+---
+
+```{r libraries}
+library(tidyverse)
+library(dplyr)
+library(plotly)
+library(ggplot2)
+library(sf)
+library(httr)
+```
+
+## Load Plotly username and api key
+
+```{r}
+Sys.setenv("plotly_username"="xxxx")
+Sys.setenv("plotly_api_key"="xxxx")
+```
+
+## Load csv file
+```{r}
+id4228 <-read_csv('../data/id4228_doc_count.csv') 
+```
+
+## Define custom function to cleanup column names
+
+```{r}
+colname_cleanup <- function(x) {
+  colnames(x) <- x %>%
+    colnames() %>%
+    str_to_lower() %>% #make colnames lowercase
+    str_replace_all(" ", "_") %>% #replace spaces with underscores
+    str_replace_all("\\/", "_") #replace slashes with underscores
+  ;x 
+}
+```
+
+## Load zipcode shapefile
+
+```{r}
+#Fetch the .shp file from the full shapefile folder
+sample_shapefile <- st_read('../data/zipcodes/geo_export_7afb9613-090f-4a4f-9066-1c8e7275dd9f.shp') %>%
+  sf::st_transform('+proj=longlat +datum=WGS84')%>%
+  colname_cleanup()
+
+```
+## Join the dataframe to the shapefile, dropping any unecessary columns
+Be sure to do a full join to preserve the multipolygon data
+
+```{r}
+hca_df <- full_join(sample_shapefile,
+                    sample_data%>%
+                      mutate(zip=as.character(zip))
+                    ) #%>% 
+          #replace(is.na(.), 0) #replace all NAs in df with zeros for choropleth mapping
+```
+
+## Community HCA
+
+```{r HCA and HTI from_npi}
+hca_df %>%
+  ggplot(aes(fill=patient_count)) +
+  geom_sf(color=NA) + 
+  scale_fill_viridis_c(option = "plasma", na.value = "grey60")+
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of referrals',
+      title = 'HCA') +
+  theme_minimal()
+
+#fig <- ggplotly(hca) not sure why it's not working
+#fig
+
+```
+
+### Community Vanderbilt
+
+```{r}
+id4238_doc_data <-read_csv('../data/id4238_doc_count.csv') 
+```
+
+```{r}
+id4238_doc_df <- full_join(sample_shapefile,
+                    id4238_doc_data%>%
+                      mutate(zip=as.character(zip))
+                    ) %>% 
+          replace(is.na(.), 0) #replace all NAs in df with zeros for choropleth mapping
+```
+
+```{r Vandy}
+id4238_doc_df %>%
+  ggplot(aes(fill=patient_count)) +
+  geom_sf(color= "grey50") + #set 
+  #coord_sf(crs=)
+  scale_fill_gradientn(colours = c("white", "cyan", "magenta"), values = c(0,0.001,1)) +
+  #scale_fill_viridis_c(option = "plasma", na.value = "grey60")+
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of referrals',
+      title = '  Vanderbilt University Medical Center')
+
+```
+
+### Community Saint Thomas Hospital
+
+```{r}
+id4233_doc_data <-read_csv('../data/id4233_doc_count.csv') 
+```
+
+```{r}
+id4233_doc_df <- full_join(sample_shapefile,
+                    id4233_doc_data%>%
+                      mutate(zip=as.character(zip))
+                    ) %>% 
+          replace(is.na(.), 0) #replace all NAs in df with zeros for choropleth mapping
+```
+
+```{r}
+id4233_doc_df %>%
+  ggplot(aes(fill=patient_count)) +
+  geom_sf(color=NA) + #set 
+  #coord_sf(crs=)
+  scale_fill_gradientn(colours = c("grey80", "cyan", "magenta"), values = c(0,0.001,1)) +
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of referrals',
+      title = 'Saint Thomas Hospital') +
+  theme_minimal()
+```
+
+
+### Three communities together
+
+```{r}
+com_3_data <-read_csv('../data/community_3.csv') 
+```
+
+### Cross Join
+
+```{r}
+### Use crossing function to avoid having '0' where communities have no zipcode value to avoid having a map with values 0 only for the facet_wrap
+cross_join <- crossing(communityId = c(4228, 4233, 4238), zip = sample_shapefile %>% pull(zip))
+```
+
+
+```{r}
+### Full Join
+com3_merge_data <- full_join(cross_join,
+                    com_3_data%>%
+                      mutate(zip=as.character(zip))
+                    )%>% 
+          replace(is.na(.), 0) #replace all NAs in df with zeros for choropleth mapping
+```
+```{r}
+com3_merge_df <- full_join(sample_shapefile,
+                    com3_merge_data %>%
+                      mutate(zip=as.character(zip))
+                    )%>% 
+          replace(is.na(.), 0) #replace all NAs in df with zeros for choropleth mapping
+```
+
+
+```{r}
+com3_merge_df$communityId[com3_merge_df$communityId  == 4228]  <-  "HCA Hospitals"
+com3_merge_df$communityId[com3_merge_df$communityId  == 4238]  <-  "Vanderbilt University Medical Center"
+com3_merge_df$communityId[com3_merge_df$communityId  == 4233]  <-  "Saint Thomas Hospitals"
+```
+
+
+```{r Test}
+
+com3_merge_df %>%
+  ggplot(aes(fill=count)) +
+  geom_sf(color='grey50') + #set 
+  #coord_sf(crs=)
+  scale_fill_gradientn(colours = c("white", "cyan", "magenta"), values = c(0,0.001,1)) + 
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of \nreferrals',
+      title = 'Number of Referrals for three main communities by zipcodes') +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~communityId)
+```
+### Use a log function since the communities numbers are different
+
+```{r different settings}
+
+facet_1 <- com3_merge_df %>%
+  ggplot(aes(fill=count)) +
+  geom_sf(color=NA) + 
+  scale_fill_gradientn(colours = c("grey80", "cyan", "magenta"), 
+                       values = c(0,0.001,1),
+                       breaks = c(10, 25, 100, 400),
+                       labels = c(10, 25, 100, 400),
+                       trans = 'log1p') + #log
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of \nreferrals',
+      title = '                  Number of Referrals for three main communities by zipcodes') +
+  facet_wrap(~communityId)
+
+facet_1
+```
+
+
+```{r Final with a log}
+
+facet_2 <- com3_merge_df %>%
+  ggplot(aes(fill=count)) +
+  geom_sf(color="grey50") + 
+  scale_fill_gradientn(colours = c("white", "cyan", "magenta"), 
+                       values = c(0,0.001,1),
+                       breaks = c(10, 25, 100, 400),
+                       labels = c(10, 25, 100, 400),
+                       trans = 'log1p') + #log
+  coord_sf(datum = NA) +
+  labs(fill= 'Number of \nreferrals') +
+  ggtitle("Number of Referrals by ZIP code to Three Main Communities") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~communityId)
+#fig <- ggplotly(facet_2) 
+facet_2
+```
+
+```{r}
+ggsave("facet_2.png", width = 8, height = 4, dpi = 700)
+```
+
+#Publish to plotly
+```{r}
+api_create(facet_2, filename = "community_louvain_map")
+```
